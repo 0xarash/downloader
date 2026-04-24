@@ -1,0 +1,71 @@
+name: yt downloader
+
+on:
+  workflow_dispatch:
+    inputs:
+      url:
+        description: 'YouTube Video URL'
+        required: true
+        type: string
+      quality:
+        description: 'Quality (480p, 720p, 1080p)'
+        required: false
+        default: '720p'
+        type: choice
+        options:
+          - '480p'
+          - '720p'
+          - '1080p'
+
+jobs:
+  download:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup yt-dlp
+        uses: AnimMouse/setup-yt-dlp@v3
+        with:
+          ffmpeg: true      # Merges video+audio streams
+          aria2: true       # Faster downloads with multi-connection
+          ejs-node: true    # Bypasses YouTube JavaScript challenges[citation:1][citation:4]
+      
+      - name: Download YouTube video
+        run: |
+          # Set quality format selector based on input
+          case "${{ inputs.quality }}" in
+            "480p")
+              FORMAT="best[height<=480][ext=mp4]/best[height<=480]/best"
+              ;;
+            "720p")
+              FORMAT="best[height<=720][ext=mp4]/best[height<=720]/best"
+              ;;
+            "1080p")
+              FORMAT="best[height<=1080][ext=mp4]/best[height<=1080]/best"
+              ;;
+            *)
+              FORMAT="best[height<=720][ext=mp4]/best[height<=720]/best"
+              ;;
+          esac
+          
+          # Download with clean filename template
+          # %(title)#S sanitizes special characters like /, \, :, ?, *, ", etc.[citation:2]
+          # %(id)s adds video ID as fallback for uniqueness
+          # %(ext)s for file extension
+          yt-dlp \
+            -f "$FORMAT" \
+            -o "%(title)#S_%(id)s.%(ext)s" \
+            --restrict-filenames \
+            --no-playlist \
+            "${{ inputs.url }}"
+      
+      - name: Commit downloaded video
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add *.mp4 *.webm *.mkv 2>/dev/null || true
+          git commit -m "Download YouTube: ${{ inputs.url }}" || echo "No files to commit"
+          git push
